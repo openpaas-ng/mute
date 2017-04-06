@@ -1,5 +1,7 @@
-import { Component, Injectable, OnDestroy, OnInit, ViewChild } from '@angular/core'
+import { Component, Injectable, OnDestroy, OnInit, ViewChild, NgZone } from '@angular/core'
 import { ActivatedRoute, Params } from '@angular/router'
+import { MediaChange, ObservableMedia } from '@angular/flex-layout'
+import { Subscription } from 'rxjs/Rx'
 import { MuteCore } from 'mute-core'
 
 import { Doc } from '../core/Doc'
@@ -21,24 +23,38 @@ export class DocComponent implements OnDestroy, OnInit {
 
   private doc: Doc
   private key: string
+  private mediaSubscription: Subscription
+  private activeMediaQuery: string
 
   @ViewChild('rightSidenavElm') rightSidenavElm
+  @ViewChild('leftSidenavElm') leftSidenavElm
   private inited = false
 
   public muteCore: MuteCore
+  public rightSideNavMode = 'side'
 
   constructor (
+    private zone: NgZone,
+    private route: ActivatedRoute,
     private richCollaboratorsService: RichCollaboratorsService,
     private profile: ProfileService,
-    private route: ActivatedRoute,
     private botStorage: BotStorageService,
     private network: NetworkService,
     private syncStorage: SyncStorageService,
-    public ui: UiService
+    public ui: UiService,
+    public media: ObservableMedia
   ) {}
 
   ngOnInit () {
     log.angular('DocComponent init')
+    log.debug('SIDENAV', this.rightSidenavElm)
+    this.mediaSubscription = this.media.subscribe((change: MediaChange) => {
+      this.activeMediaQuery = change ? `'${change.mqAlias}' = (${change.mediaQuery})` : ''
+      if ( change.mqAlias === 'xs') {
+        this.rightSideNavMode = 'over'
+      }
+    })
+
     this.route.data
       .subscribe((data: {doc: Doc}) => {
         this.doc = data.doc
@@ -53,6 +69,15 @@ export class DocComponent implements OnDestroy, OnInit {
           })
         })
       })
+
+    this.ui.onNavToggle.subscribe(() => {
+      this.leftSidenavElm.opened = !this.leftSidenavElm.opened
+    })
+
+    this.ui.onDocNavToggle.subscribe(() => {
+      this.rightSidenavElm.opened = !this.rightSidenavElm.opened
+    })
+
     this.route.params.subscribe((params: Params) => {
       const key = params['key'] // (+) converts string 'id' to a number
       if (this.inited) {
@@ -68,41 +93,42 @@ export class DocComponent implements OnDestroy, OnInit {
       window.crypto.getRandomValues(ids)
       const id: number = ids[0]
 
-      this.muteCore = new MuteCore(id)
-      this.muteCore.messageSource = this.network.onMessage
-      this.network.initSource = this.muteCore.onInit
-      this.network.messageToBroadcastSource = this.muteCore.onMsgToBroadcast
-      this.network.messageToSendRandomlySource = this.muteCore.onMsgToSendRandomly
-      this.network.messageToSendToSource = this.muteCore.onMsgToSendTo
+      this.zone.runOutsideAngular(() => {
+        this.muteCore = new MuteCore(id)
+        this.muteCore.messageSource = this.network.onMessage
+        this.network.initSource = this.muteCore.onInit
+        this.network.messageToBroadcastSource = this.muteCore.onMsgToBroadcast
+        this.network.messageToSendRandomlySource = this.muteCore.onMsgToSendRandomly
+        this.network.messageToSendToSource = this.muteCore.onMsgToSendTo
 
-      this.muteCore.collaboratorsService.peerJoinSource = this.network.onPeerJoin
-      this.muteCore.collaboratorsService.peerLeaveSource = this.network.onPeerLeave
-      this.muteCore.collaboratorsService.pseudoSource = this.profile.onPseudonym
-      this.richCollaboratorsService.collaboratorChangePseudoSource = this.muteCore.collaboratorsService.onCollaboratorChangePseudo
-      this.richCollaboratorsService.collaboratorJoinSource = this.muteCore.collaboratorsService.onCollaboratorJoin
-      this.richCollaboratorsService.collaboratorLeaveSource = this.muteCore.collaboratorsService.onCollaboratorLeave
+        this.richCollaboratorsService.pseudoChangeSource = this.muteCore.collaboratorsService.onCollaboratorChangePseudo
+        this.richCollaboratorsService.joinSource = this.muteCore.collaboratorsService.onCollaboratorJoin
+        this.richCollaboratorsService.leaveSource = this.muteCore.collaboratorsService.onCollaboratorLeave
 
-      this.muteCore.syncService.setJoinAndStateSources(this.network.onJoin, this.syncStorage.onStoredState)
-      this.syncStorage.initSource = this.muteCore.onInit.map((key: string) => this.doc)
-      this.syncStorage.stateSource = this.muteCore.syncService.onState
+        this.muteCore.collaboratorsService.peerJoinSource = this.network.onPeerJoin
+        this.muteCore.collaboratorsService.peerLeaveSource = this.network.onPeerLeave
+        this.muteCore.collaboratorsService.pseudoSource = this.profile.onPseudonym
 
-      this.muteCore.docService.onDocDigest.subscribe((digest: number) => {
-        this.ui.digest = digest
+        this.muteCore.syncService.setJoinAndStateSources(this.network.onJoin, this.syncStorage.onStoredState)
+        this.syncStorage.initSource = this.muteCore.onInit.map((key: string) => this.doc)
+        this.syncStorage.stateSource = this.muteCore.syncService.onState
+
+        this.muteCore.docService.onDocDigest.subscribe((digest: number) => {
+          this.ui.digest = digest
+        })
+      })
+
+      this.muteCore.docService.onDocTree.subscribe((tree: string) => {
+        this.ui.tree = tree
       })
     })
-    this.ui.onDocNavToggle.subscribe((open: boolean) => {
-      this.rightSidenavElm.opened = open
-    })
-    if (this.ui.navOpened) {
-      this.ui.closeNav()
-    }
-    this.ui.openDocNav()
   }
 
   ngOnDestroy () {
     log.angular('DocComponent destroyed')
     this.network.cleanWebChannel()
     this.muteCore.clean()
+    this.mediaSubscription.unsubscribe()
   }
 
   editorReady (): void {
