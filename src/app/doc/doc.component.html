@@ -1,22 +1,25 @@
-<md-sidenav-container>
+<mute-toolbar (menu)="menuSidenav.toggle()" (info)="infoSidenav.toggle()">
+</mute-toolbar>
 
-  <!-- Left Sidenav-->
-  <md-sidenav #leftSidenavElm class="leftsidenav"
-      mode="over"
-  >
+<mat-sidenav-container>
+
+  <!-- Menu Sidenav-->
+  <mat-sidenav mode="over" #menuSidenav class="menu-sidenav">
     <mute-nav></mute-nav>
-  </md-sidenav>
+  </mat-sidenav>
 
   <!-- Content -->
-  <mute-editor [docService]="muteCore.docService" (isReady)="editorReady()"></mute-editor>
+  <mat-sidenav-content class="content">
+    <mat-drawer-container class="content" hasBackdrop="false">
 
-  <!-- Right Sidenav-->
-  <md-sidenav #rightSidenavElm class="rightsidenav"
-      align="end"
-      [opened]="!this.media.isActive('xs')"
-      [mode]="rightSideNavMode"
-  >
-    <mute-right-side></mute-right-side>
-  </md-sidenav>
+      <mat-drawer-content>
+        <mute-editor [ngClass]="extrasmall" (isReady)="editorReady()"></mute-editor>
+      </mat-drawer-content>
+      <mat-drawer autoFocus="false" position="end" [mode]="drawerMode | async" [opened]="drawerOpened | async"
+        #infoSidenav class="info-sidenav" ngClass.lt-sm="info-sidenav-lt-sm">
+        <mute-right-side class="info-panel"></mute-right-side>
+      </mat-drawer>
+    </mat-drawer-container>
+  </mat-sidenav-content>
 
-</md-sidenav-container>
+</mat-sidenav-container>

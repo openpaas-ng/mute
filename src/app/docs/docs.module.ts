@@ -1,33 +1,12 @@
 import { NgModule } from '@angular/core'
-import { CommonModule } from '@angular/common'
-import { RouterModule } from '@angular/router'
 
-import { SharedModule } from '../shared'
+import { SharedModule } from '../shared/shared.module'
 import { DocsComponent } from './docs.component'
-import { NavModule } from '../nav'
+import { ToolbarComponent } from './toolbar/toolbar.component'
 
 @NgModule({
-  declarations: [ DocsComponent ],
-  imports: [
-    CommonModule,
-    SharedModule,
-    NavModule,
-    RouterModule.forChild([
-      {
-        path: 'docs',
-        redirectTo: '/docs/all',
-        pathMatch: 'full'
-      }, {
-        path: 'docs/:storage',
-        component: DocsComponent
-      }
-    ])
-  ],
-  providers: []
+  imports: [SharedModule],
+  declarations: [ToolbarComponent, DocsComponent],
+  entryComponents: [],
 })
-export class DocsModule {
-
-  constructor () {
-    log.angular('DocsModule constructed')
-  }
-}
+export class DocsModule {}

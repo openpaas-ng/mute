@@ -1,28 +1,5 @@
-/* You can add global styles to this file, and also import other style files */
-@import '~normalize.css/normalize.css';
-@import '~material-design-icons/iconfont/material-icons.css';
-@import '~codemirror/lib/codemirror.css';
-
-@import 'theme';
-@import 'mute-codemirror.scss';
-@import 'variables';
-@import 'spinner.scss';
-
-html {
-  font-size: 10px;
-
-  &, body {
-    height: 100%;
-    width: 100%;
-  }
-
-  body {
-    font-size: 1.4rem;
-    background-color: $bg-background;
-    margin: 0;
-  }
-
-  .md-sidenav-content {
-    transition: all .4s cubic-bezier(.25,.8,.25,1);
-  }
-}
+@import 'spinner';
+@import 'themes';
+@import 'fonts';
+@import 'editor';
+@import 'tooltip';

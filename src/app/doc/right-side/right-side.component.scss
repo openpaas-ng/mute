@@ -1,43 +1,23 @@
-@import 'variables';
+.actions {
+  margin: 20px 20px 20px 0;
+}
 
-md-list {
-  text-align: right;
+.container {
+  height: 100%;
+  overflow: hidden;
+}
 
-  mute-edit-field {
-    font-size: 2rem;
-  }
+mat-tab-group {
+  height: 100%;
+}
 
-  h3 {
-    text-align: left;
-  }
+.tab-header {
+  display: inline-block;
+  min-width: 112px;
+}
 
-  .storages {
-    md-chip {
-      margin: 0 7px;
-
-      &:last-child {
-        margin: 0;
-      }
-    }
-  }
-
-  md-divider {
-    margin-bottom: 10px;
-  }
-
-  .connection {
-
-    .title {
-      line-height: 2.5rem;
-    }
-
-    .indicator {
-      margin-left: 5px;
-    }
-  }
-
-  md-progress-circle {
-    width: 24px;
-    height: 24px;
-  }
+.cheatsheet-tab {
+  box-sizing: content-box;
+  padding: 20px 10px 0px 5px;
+  height: 100%;
 }

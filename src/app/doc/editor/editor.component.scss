@@ -1,25 +1,27 @@
-@import 'theme';
-@import 'variables';
-
 :host {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  align-items: stretch;
-  align-content: stretch;
   height: 100%;
+  box-sizing: border-box;
+  display: block;
 }
 
-md-card {
-  height: auto;
-  margin: 14px auto;
-  flex: 1 1 auto;
-  cursor: text;
-  width: 100%;
-}
+mat-card {
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+  margin: 0 auto;
+  flex-basis: 100%;
+  max-width: 800px;
 
-.airbag {
-  height: 20px;
-  flex: 0 0 auto;
+  &.card-lg {
+    margin: 0 auto;
+    flex-basis: 100%;
+    max-width: 800px;
+  }
+  &.card-gt-lg {
+    margin: 0 auto;
+    flex-basis: 950px;
+    min-width: 950px;
+    max-width: 950px;
+  }
 }
-

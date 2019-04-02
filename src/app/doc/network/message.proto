@@ -1,14 +1,6 @@
 syntax = "proto3";
 
 message Message {
-  string service = 1;
+  uint32 streamId = 1;
   bytes content = 2;
-}
-
-message BotProtocol {
-  string key = 1;
-}
-
-message BotReponse {
-  string url = 1;
 }

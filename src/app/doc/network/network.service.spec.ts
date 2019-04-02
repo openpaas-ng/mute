@@ -1,16 +1,15 @@
-/* tslint:disable:no-unused-variable */
-
-import { TestBed, async, inject } from '@angular/core/testing'
 import { NetworkService } from './network.service'
 
-describe('Service: Network', () => {
+describe('NetworkService', () => {
+  let networkService: NetworkService
+
   beforeEach(() => {
-    TestBed.configureTestingModule({
-      providers: [NetworkService]
-    })
+    networkService = new NetworkService()
+    networkService.init()
+    networkService.wg.join('key')
   })
 
-  it('should ...', inject([NetworkService], (service: NetworkService) => {
-    expect(service).toBeTruthy()
-  }))
+  it('Correct Init', () => {
+    expect(networkService).toBeTruthy()
+  })
 })

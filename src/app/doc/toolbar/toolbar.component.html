@@ -1,0 +1,73 @@
+<mat-toolbar color="primary" class="mat-elevation-z6">
+  <div fxFill fxLayoutAlign="space-between">
+    <div fxLayoutAlign="start center">
+      <button mat-icon-button (click)="menu.emit()">
+        <mat-icon>menu</mat-icon>
+      </button>
+
+      <div class="title">
+        <mat-form-field ngClass.gt-xs="gt-xs" color="accent">
+          <input #input matInput [value]="doc.title" (keydown)="updateTitle($event)" (blur)="updateTitle($event)"
+            (focus)="selectTitle()" />
+        </mat-form-field>
+      </div>
+    </div>
+
+    <div fxLayoutAlign="end center">
+      <mute-sync class="sync action"></mute-sync>
+      <button mat-icon-button class="action" [matMenuTriggerFor]="docMenu">
+        <mat-icon>more_vert</mat-icon>
+      </button>
+      <button mat-icon-button class="action" (click)="info.emit()">
+        <mat-icon>info</mat-icon>
+      </button>
+      <mute-profile class="action profile"></mute-profile>
+    </div>
+  </div>
+</mat-toolbar>
+
+<mat-menu #docMenu="matMenu" overlapTrigger="false">
+  <button disabled mat-menu-item [routerLink]="['/history', doc.signalingKey]">
+    <mat-icon>history</mat-icon>
+    Version history
+  </button>
+  <button mat-menu-item (click)="inviteBot()" [disabled]="botNotAvailable">
+    <mat-icon>cloud</mat-icon>
+    Invite bot storage
+  </button>
+  <!--FIXME: *ngIf didn't work here, fxShow doesn't work with ng-container-->
+  <mat-divider fxShow="debug === true"></mat-divider>
+  <button fxShow="debug === true" mat-menu-item [matMenuTriggerFor]="debug">
+    <mat-icon>bug_report</mat-icon>
+    Debug
+  </button>
+</mat-menu>
+
+<mat-menu #debug="matMenu">
+  <div (click)="stopPropagation($event)">
+    <button mat-menu-item (click)="downloadMuteLog()">Download MUTE logs</button>
+    <button mat-menu-item (click)="downloadDocLog()">Download doc logs</button>
+    <button mat-menu-item (click)="downloadDocTree()">Download doc tree</button>
+    <mat-divider></mat-divider>
+    <div class="logs">
+      <mat-form-field class="log-slider netflux-log">
+        <mat-select (selectionChange)="updateNetfluxLog()" [(value)]="netfluxLog" placeholder="Netflux log levels"
+          multiple>
+          <mat-option [value]="LogLevel.DEBUG">Debug</mat-option>
+          <mat-option [value]="LogLevel.CHANNEL">Channel</mat-option>
+          <mat-option [value]="LogLevel.SIGNALING">Signaling</mat-option>
+          <mat-option [value]="LogLevel.WEB_GROUP">Web Group</mat-option>
+          <mat-option [value]="LogLevel.WEBRTC">WebRTC</mat-option>
+          <mat-option [value]="LogLevel.CHANNEL_BUILDER">Channel Builder</mat-option>
+          <mat-option [value]="LogLevel.TOPOLOGY">Topology</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <mat-slide-toggle (change)="updateCryptoLog()" [(ngModel)]="cryptoLog" class="log-slider">Cryptography logs
+      </mat-slide-toggle><br />
+      <mat-slide-toggle (change)="updateDocLog()" [(ngModel)]="docLog" class="log-slider">Document logs
+      </mat-slide-toggle><br />
+    </div>
+  </div>
+</mat-menu>
+
+<a #debugDownload class="debug-download"></a>

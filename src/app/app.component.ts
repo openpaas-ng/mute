@@ -1,23 +1,36 @@
-import { Component, ChangeDetectionStrategy } from '@angular/core'
-
-import { environment } from '../environments/environment'
+import { animate, state, style, transition, trigger } from '@angular/animations'
+import { Component } from '@angular/core'
+import { UiService } from './core/ui/ui.service'
 
 @Component({
   selector: 'mute-root',
   templateUrl: './app.component.html',
-  styleUrls: ['./app.component.scss']
+  styleUrls: ['./app.component.scss'],
+  animations: [
+    trigger('update', [
+      state('visible', style({ transform: 'translateX(0)' })),
+      state('void', style({ transform: 'translateX(-500px)' })),
+      transition(':enter', animate('400ms ease-out')),
+      transition(':leave', animate('200ms ease-in')),
+    ]),
+  ],
 })
 export class AppComponent {
+  public version: string
+  public state: string
 
-  public visible: boolean
-
-  constructor (
-  ) {
-    this.visible = environment.devLabel
+  constructor(ui: UiService) {
+    ui.appUpdate.subscribe(({ version }) => {
+      this.version = version
+      this.state = 'visible'
+    })
   }
 
-  isVisible () {
-    log.debug('Dev-Label: Detect change run...')
-    return this.visible
+  close() {
+    this.state = 'void'
+  }
+
+  update() {
+    document.location.reload()
   }
 }

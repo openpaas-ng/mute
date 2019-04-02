@@ -1,32 +1,30 @@
-import { NgModule } from '@angular/core'
-import { Http } from '@angular/http'
 import { CommonModule } from '@angular/common'
+import { HTTP_INTERCEPTORS, HttpClientModule } from '@angular/common/http'
+import { NgModule } from '@angular/core'
+import { JwtInterceptor, Ng2UiAuthModule } from 'ng2-ui-auth'
 
-import { BotStorageService } from './storage/bot-storage/bot-storage.service'
-import { LocalStorageService } from './storage/local-storage/local-storage.service'
-import { ProfileService } from './profile/profile.service'
-import { StorageOverviewService } from './storage/storage-overview.service'
+import { environment } from '../../environments/environment'
+import { CryptoService } from './crypto/crypto.service'
+import { SettingsService } from './settings/settings.service'
+import { BotStorageService } from './storage/bot/bot-storage.service'
+import { LocalStorageService } from './storage/local/local-storage.service'
 import { UiService } from './ui/ui.service'
-import { XirsysService } from './xirsys/xirsys.service'
 
 @NgModule({
-  imports: [
-    CommonModule
-  ],
+  imports: [CommonModule, HttpClientModule, Ng2UiAuthModule.forRoot(environment.authentication)],
   exports: [],
   declarations: [],
   providers: [
-    Http,
-    BotStorageService,
+    {
+      provide: HTTP_INTERCEPTORS,
+      useClass: JwtInterceptor,
+      multi: true,
+    },
+    SettingsService,
     LocalStorageService,
-    ProfileService,
-    StorageOverviewService,
+    BotStorageService,
     UiService,
-    XirsysService
-  ]
+    CryptoService,
+  ],
 })
-export class CoreModule {
-  constructor () {
-    log.angular('CoreModule constructed')
-  }
-}
+export class CoreModule {}

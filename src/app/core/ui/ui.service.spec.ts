@@ -1,16 +1,10 @@
-/* tslint:disable:no-unused-variable */
-
-import { TestBed, async, inject } from '@angular/core/testing'
+import { async } from '@angular/core/testing'
 import { UiService } from './ui.service'
 
 describe('UiService', () => {
-  beforeEach(() => {
-    TestBed.configureTestingModule({
-      providers: [UiService]
-    })
-  })
+  let uiService: UiService
 
-  it('should ...', inject([UiService], (service: UiService) => {
-    expect(service).toBeTruthy()
-  }))
+  beforeEach(async(() => (uiService = new UiService())))
+
+  it('Correct Init', () => expect(uiService).toBeTruthy())
 })

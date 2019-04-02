@@ -1,256 +1,268 @@
-/// <reference path="../../../../node_modules/@types/node/index.d.ts" />
-import { Injectable } from '@angular/core'
-import { Observable, ReplaySubject, Subject, Subscription } from 'rxjs/Rx'
-import { create } from 'netflux'
-import { BroadcastMessage, JoinEvent, NetworkMessage, SendRandomlyMessage, SendToMessage } from 'mute-core'
+import { Injectable, NgZone, OnDestroy } from '@angular/core'
+import { ActivatedRoute } from '@angular/router'
+import { Streams as MuteCoreStreams } from '@coast-team/mute-core'
+import { KeyAgreementBD, KeyState, Streams as MuteCryptoStreams, Symmetric } from '@coast-team/mute-crypto'
+import { SignalingState, WebGroup, WebGroupState } from 'netflux'
+import { BehaviorSubject, Observable, Subject, Subscription } from 'rxjs'
 
+import { filter } from 'rxjs/operators'
 import { environment } from '../../../environments/environment'
-import { XirsysService } from '../../core/xirsys/xirsys.service'
-const pb = require('./message_pb.js')
+import { CryptoService } from '../../core/crypto/crypto.service'
+import { EncryptionType } from '../../core/crypto/EncryptionType'
+import { Doc } from '../../core/Doc'
+import { Message } from './message_proto'
 
 @Injectable()
-export class NetworkService {
-
-  private webChannel
-  private key: string
+export class NetworkService implements OnDestroy {
+  public wg: WebGroup
   private botUrls: string[]
 
-  private disposeSubject: Subject<void>
-
   // Subjects related to the current peer
-  private joinSubject: Subject<JoinEvent>
   private leaveSubject: Subject<number>
-  private doorSubject: Subject<boolean>
 
   // Network message subject
-  private messageSubject: ReplaySubject<NetworkMessage>
+  private messageSubject: Subject<{ streamId: number; content: Uint8Array; senderId: number }>
 
   /**
    * Peer Join/Leave subjects
    */
-  private peerJoinSubject: ReplaySubject<number>
-  private peerLeaveSubject: ReplaySubject<number>
+  private memberJoinSubject: Subject<number>
+  private memberLeaveSubject: Subject<number>
 
-  private messageToBroadcastSubscription: Subscription
-  private messageToSendRandomlySubscription: Subscription
-  private messageToSendToSubscription: Subscription
+  // Connection state subject
+  private stateSubject: BehaviorSubject<WebGroupState>
+  private signalingSubject: BehaviorSubject<SignalingState>
 
-  constructor (
-    private xirsys: XirsysService
-  ) {
-    log.angular('NetworkService constructed')
+  // Other
+  private subs: Subscription[]
 
+  constructor(private zone: NgZone, private route: ActivatedRoute, private cryptoService: CryptoService) {
     this.botUrls = []
+    this.subs = []
 
     // Initialize subjects
-    this.disposeSubject = new Subject<void>()
+    this.memberJoinSubject = new Subject()
+    this.memberLeaveSubject = new Subject()
+    this.signalingSubject = new BehaviorSubject(SignalingState.CLOSED)
+    this.stateSubject = new BehaviorSubject(WebGroupState.LEFT)
+    this.messageSubject = new Subject()
 
-    this.joinSubject = new Subject()
     this.leaveSubject = new Subject()
-    this.doorSubject = new Subject()
 
-    this.messageSubject = new ReplaySubject()
-
-    this.peerJoinSubject = new ReplaySubject()
-    this.peerLeaveSubject = new ReplaySubject()
-
-    // Leave webChannel before closing tab or browser
-    window.addEventListener('beforeunload', () => {
-      if (this.webChannel !== undefined) {
-        this.webChannel.leave()
-      }
-    })
-  }
-
-  initWebChannel (): void {
-    this.webChannel = create({signalingURL: environment.signalingURL})
-
-    // Peer JOIN event
-    this.webChannel.onPeerJoin = (id) => this.peerJoinSubject.next(id)
-
-    // Peer LEAVE event
-    this.webChannel.onPeerLeave = (id) => this.peerLeaveSubject.next(id)
-
-    // On door closed
-    this.webChannel.onClose = () => this.doorSubject.next(false)
-
-    // Message event
-    this.webChannel.onMessage = (id, bytes, isBroadcast) => {
-      const msg = pb.Message.deserializeBinary(bytes)
-      const serviceName = msg.getService()
-      if (serviceName === 'botprotocol') {
-        let msg = new pb.Message()
-        msg.setService('botprotocol')
-        let content = new pb.BotProtocol()
-        content.setKey(this.key)
-        msg.setContent(content.serializeBinary())
-        this.webChannel.sendTo(id, msg.serializeBinary())
-      } else if (serviceName === 'botresponse') {
-        log.debug('BotResponse')
-        const url = pb.BotResponse.deserializeBinary(msg.getContent()).getUrl()
-        this.botUrls.push(url)
-      } else {
-        const networkMessage = new NetworkMessage(serviceName, id, isBroadcast, msg.getContent())
-        this.messageSubject.next(networkMessage)
-      }
-    }
-  }
-
-  set initSource (source: Observable<string>) {
-    source
-      .takeUntil(this.disposeSubject)
-      .subscribe((key: string) => {
-        this.join(key)
+    this.zone.runOutsideAngular(() => {
+      this.wg = new WebGroup({
+        signalingServer: environment.p2p.signalingServer,
+        rtcConfiguration: environment.p2p.rtcConfiguration,
       })
-  }
+      window.wg = this.wg
 
-  set messageToBroadcastSource (source: Observable<BroadcastMessage>) {
-    this.messageToBroadcastSubscription = source.subscribe((broadcastMessage: BroadcastMessage) => {
-      this.send(broadcastMessage.service, broadcastMessage.content)
+      this.wg.onSignalingStateChange = (state) => this.signalingSubject.next(state)
+
+      switch (environment.cryptography.type) {
+        case EncryptionType.KEY_AGREEMENT_BD:
+          this.configureKeyAgreementBDEncryption()
+          break
+        case EncryptionType.METADATA:
+          this.configureMetaDataEncryption()
+          break
+        case EncryptionType.NONE:
+          this.configureNoEncryption()
+          break
+        default:
+          log.error('Unknown Encryption type: ', environment.cryptography.type)
+      }
     })
   }
 
-  set messageToSendRandomlySource (source: Observable<SendRandomlyMessage>) {
-    this.messageToSendRandomlySubscription = source.subscribe((sendRandomlyMessage: SendRandomlyMessage) => {
-      const index: number = Math.ceil(Math.random() * this.members.length) - 1
-      const id: number = this.members[index]
-      this.send(sendRandomlyMessage.service, sendRandomlyMessage.content, id)
+  leave() {
+    this.wg.leave()
+  }
+
+  setMessageIn(source: Observable<{ streamId: number; content: Uint8Array; recipientId?: number }>) {
+    this.subs[this.subs.length] = source.subscribe(({ streamId, content, recipientId }) => {
+      if (this.members.length > 1) {
+        if (streamId === MuteCoreStreams.DOCUMENT_CONTENT && environment.cryptography.type !== EncryptionType.NONE) {
+          this.cryptoService.crypto
+            .encrypt(content)
+            .then((encryptedContent) => this.send(streamId, encryptedContent, recipientId))
+            .catch((err) => {})
+        } else {
+          this.send(streamId, content, recipientId)
+        }
+      }
     })
   }
 
-  set messageToSendToSource (source: Observable<SendToMessage>) {
-    this.messageToSendToSubscription = source.subscribe((sendToMessage: SendToMessage) => {
-      this.send(sendToMessage.service, sendToMessage.content, sendToMessage.id)
-    })
+  get myId(): number {
+    return this.wg.myId
   }
 
-  get myId (): number {
-    return this.webChannel.myId
+  get members(): number[] {
+    return this.wg.members
   }
 
-  get members (): number[] {
-    return this.webChannel.members
+  get state(): WebGroupState {
+    return this.wg.state
   }
 
-  get onMessage (): Observable<NetworkMessage> {
+  get cryptoState(): KeyState {
+    return this.cryptoService.crypto.state
+  }
+
+  get messageOut(): Observable<{ streamId: number; content: Uint8Array; senderId: number }> {
     return this.messageSubject.asObservable()
   }
 
-  get onJoin (): Observable<JoinEvent> {
-    return this.joinSubject.asObservable()
-  }
-
-  get onLeave (): Observable<number> {
+  get onLeave(): Observable<number> {
     return this.leaveSubject.asObservable()
   }
 
-  get onPeerJoin (): Observable<number> {
-    return this.peerJoinSubject.asObservable()
+  get onMemberJoin(): Observable<number> {
+    return this.memberJoinSubject.asObservable()
   }
 
-  get onPeerLeave (): Observable<number> {
-    return this.peerLeaveSubject.asObservable()
+  get onMemberLeave(): Observable<number> {
+    return this.memberLeaveSubject.asObservable()
   }
 
-  get onDoor (): Observable<boolean> {
-    return this.doorSubject.asObservable()
+  get onStateChange(): Observable<WebGroupState> {
+    return this.stateSubject.asObservable()
   }
 
-  cleanWebChannel (): void {
-    if (this.webChannel !== undefined) {
-      this.webChannel.close()
-      this.webChannel.leave()
-      this.leaveSubject.next()
+  get onSignalingStateChange(): Observable<SignalingState> {
+    return this.signalingSubject.asObservable()
+  }
 
-      this.disposeSubject.complete()
+  get onCryptoStateChange(): Observable<KeyState> {
+    return this.cryptoService.onStateChange
+  }
+
+  ngOnDestroy(): void {
+    if (this.wg !== undefined) {
       this.messageSubject.complete()
-      this.joinSubject.complete()
       this.leaveSubject.complete()
-      this.peerJoinSubject.complete()
-      this.peerLeaveSubject.complete()
-      this.doorSubject.complete()
+      this.memberJoinSubject.complete()
+      this.memberLeaveSubject.complete()
 
-      this.disposeSubject = new Subject<void>()
-      this.messageSubject = new ReplaySubject<NetworkMessage>()
-      this.joinSubject = new Subject()
-      this.leaveSubject = new Subject()
-      this.peerJoinSubject = new ReplaySubject<number>()
-      this.peerLeaveSubject = new ReplaySubject<number>()
-      this.doorSubject = new Subject<boolean>()
-
-      this.messageToBroadcastSubscription.unsubscribe()
-      this.messageToSendRandomlySubscription.unsubscribe()
-      this.messageToSendToSubscription.unsubscribe()
+      this.wg.leave()
     }
   }
 
-  join (key): Promise<void> {
-    this.key = key
-    return this.xirsys.iceServers
-      .then((iceServers) => {
-        if (iceServers !== null) {
-          this.webChannel.settings.iceServers = iceServers
-        }
-      })
-      .then(() => this.webChannel.join(key))
-      .then(() => {
-        log.info('network', `Joined successfully via ${this.webChannel.settings.signalingURL} with ${key} key`)
-        this.doorSubject.next(true)
-        const created = this.members.length === 0
-        this.joinSubject.next(new JoinEvent(this.webChannel.myId, key, created))
-      })
-      .catch((reason) => {
-        log.error(`Could not join via ${this.webChannel.settings.signalingURL} with ${key} key: ${reason}`, this.webChannel)
-        return new Error(`Could not join via ${this.webChannel.settings.signalingURL} with ${key} key: ${reason}`)
-      })
+  join(key: string) {
+    this.wg.join(key)
   }
 
-
-  inviteBot (url: string): void {
+  inviteBot(url: string): void {
     if (!this.botUrls.includes(url)) {
       const fullUrl = url.startsWith('ws') ? url : `ws://${url}`
-      this.webChannel.invite(fullUrl)
-        .then(() => {
-          log.info('network', `Bot ${fullUrl} has been invited`)
-        })
+      this.zone.runOutsideAngular(() => this.wg.invite(fullUrl))
     }
   }
 
-  send (service: string, content: ArrayBuffer): void
-
-  send (service: string, content: ArrayBuffer, id: number|undefined): void
-
-  send (service: string, content: ArrayBuffer, id?: number|undefined): void {
-    const msg = new pb.Message()
-    msg.setService(service)
-    msg.setContent(content)
+  send(streamId: number, content: Uint8Array, id?: number): void {
+    const msg = Message.create({ streamId, content })
     if (id === undefined) {
-      this.webChannel.send(msg.serializeBinary())
+      this.wg.send(Message.encode(msg).finish())
     } else {
-      this.webChannel.sendTo(id, msg.serializeBinary())
+      id = id === 0 ? this.randomMember() : id
+      this.wg.sendTo(id, Message.encode(msg).finish())
     }
   }
 
-  /**
-   * Open the door with signaling server if it is closed, otherwise do nothing.
-   */
-  openDoor (key: string): Promise<void> {
-    if (!this.webChannel.isOpen()) {
-      return this.webChannel().open(key)
-        .then(() => {
-          this.doorSubject.next(true)
-        })
-    }
-    return Promise.resolve()
+  private randomMember(): number {
+    const otherMembers = this.members.filter((i) => i !== this.wg.myId)
+    return otherMembers[Math.ceil(Math.random() * otherMembers.length) - 1]
   }
 
-  /**
-   * Close the door with signaling server if it is opened, otherwise do nothing.
-   */
-  closeDoor (): void {
-    if (this.webChannel.isOpen()) {
-      this.webChannel.close()
-      this.doorSubject.next(false)
+  private configureKeyAgreementBDEncryption() {
+    const bd = this.cryptoService.crypto as KeyAgreementBD
+    if (environment.cryptography.coniksClient || environment.cryptography.keyserver) {
+      bd.signingKey = this.cryptoService.signingKeyPair.privateKey
+      this.cryptoService.onSignatureError = (id) => log.error('Signature verification error for ', id)
+    }
+    bd.onSend = (msg, streamId) => this.send(streamId, msg)
+    // Handle network events
+    this.wg.onMyId = (myId) => bd.setMyId(myId)
+    this.wg.onMemberJoin = (id) => {
+      bd.addMember(id)
+      this.memberJoinSubject.next(id)
+    }
+    this.wg.onMemberLeave = (id) => {
+      bd.removeMember(id)
+      this.memberLeaveSubject.next(id)
+    }
+    this.wg.onStateChange = (state: WebGroupState) => {
+      if (state === WebGroupState.JOINED) {
+        bd.setReady()
+      }
+      this.stateSubject.next(state)
+    }
+    this.wg.onMessage = (id, bytes: Uint8Array) => {
+      try {
+        const { streamId, content } = Message.decode(bytes)
+        if (streamId === MuteCryptoStreams.KEY_AGREEMENT_BD) {
+          this.cryptoService.onBDMessage(id, content)
+        } else {
+          if (streamId === MuteCoreStreams.DOCUMENT_CONTENT) {
+            this.cryptoService.crypto
+              .decrypt(content)
+              .then((decryptedContent) => {
+                this.messageSubject.next({ streamId, content: decryptedContent, senderId: id })
+              })
+              .catch((err) => {})
+            return
+          }
+          this.messageSubject.next({ streamId, content, senderId: id })
+        }
+      } catch (err) {
+        log.warn('Message from network decode error: ', err.message)
+      }
+    }
+  }
+
+  private configureMetaDataEncryption() {
+    this.route.data.subscribe(({ doc }: { doc: Doc }) => {
+      doc.onMetadataChanges
+        .pipe(filter(({ isLocal, changedProperties }) => !isLocal && changedProperties.includes(Doc.CRYPTO_KEY)))
+        .subscribe(() => (this.cryptoService.crypto as Symmetric).importKey(doc.cryptoKey))
+    })
+    // Handle network events
+    this.wg.onMemberJoin = (id) => this.memberJoinSubject.next(id)
+    this.wg.onMemberLeave = (id) => this.memberLeaveSubject.next(id)
+    this.wg.onStateChange = (state: WebGroupState) => this.stateSubject.next(state)
+
+    this.wg.onMessage = (id, bytes: Uint8Array) => {
+      try {
+        const { streamId, content } = Message.decode(bytes)
+        if (streamId === MuteCoreStreams.DOCUMENT_CONTENT) {
+          this.cryptoService.crypto
+            .decrypt(content)
+            .then((decryptedContent) => {
+              this.messageSubject.next({ streamId, content: decryptedContent, senderId: id })
+            })
+            .catch((err) => {})
+          return
+        }
+        this.messageSubject.next({ streamId, content, senderId: id })
+      } catch (err) {
+        log.warn('Message from network decode error: ', err.message)
+      }
+    }
+  }
+
+  private configureNoEncryption() {
+    // Handle network events
+    this.wg.onMemberJoin = (id) => this.memberJoinSubject.next(id)
+    this.wg.onMemberLeave = (id) => this.memberLeaveSubject.next(id)
+    this.wg.onStateChange = (state: WebGroupState) => this.stateSubject.next(state)
+
+    this.wg.onMessage = (id, bytes: Uint8Array) => {
+      try {
+        const { streamId, content } = Message.decode(bytes)
+        this.messageSubject.next({ streamId, content, senderId: id })
+      } catch (err) {
+        log.warn('Message from network decode error: ', err.message)
+      }
     }
   }
 }

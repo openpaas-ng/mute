@@ -1,0 +1,14 @@
+{
+  "appData": { "version": "0.12.1" },
+  "index": "/index.html",
+  "assetGroups": [
+    {
+      "name": "app",
+      "installMode": "prefetch",
+      "updateMode": "prefetch",
+      "resources": {
+        "files": ["/index.html", "/*.js", "/*.css", "/*.png", "/assets/**/*.woff2", "/assets/**/*.png", "/assets/**/*.svg", "!/*.txt"]
+      }
+    }
+  ]
+}

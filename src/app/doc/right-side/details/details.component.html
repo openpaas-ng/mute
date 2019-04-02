@@ -1,0 +1,60 @@
+<div fxLayout="column" fxLayoutAlign="start stretch">
+  <div class="doc-block" fxLayout="column" fxLayoutAlign="start stretch">
+    <div fxLayoutAlign="start center" class="line">
+      <span class="mat-caption title">Created</span>
+      <span class="mat-body-2">{{doc.created | date:'MMMM d, y, HH:mm'}}</span>
+    </div>
+    <div fxLayoutAlign="start center" class="line">
+      <span class="mat-caption title">Digest</span>
+      <span class="mat-body-2">{{ui.docDigest | async}}</span>
+    </div>
+    <div fxLayoutAlign="start center" class="line" [matTooltip]="crypto[1]">
+      <span class="mat-caption title">Encryption</span>
+      <span class="mat-body-2">{{crypto[0]}}</span>
+    </div>
+    <div *ngIf="coniks" fxLayoutAlign="start center" class="line">
+      <span class="mat-caption title">Coniks</span>
+      <span class="mat-body-2">Yes</span>
+    </div>
+    <div *ngIf="keyserver" fxLayoutAlign="start center" class="line">
+      <span class="mat-caption title">Keyserver</span>
+      <span class="mat-body-2">Yes</span></div>
+  </div>
+
+  <div class="doc-block">
+    <div fxLayoutAlign="start center">
+      <span class="mat-caption title">Share logs</span>
+      <span class="mat-body-2">
+        <mat-slide-toggle [checked]="doc.shareLogs" (change)="updateShareLogs($event)"></mat-slide-toggle>
+      </span>
+      <mat-icon class="icon mat-primary" matTooltipClass="logs-info-tooltip" [matTooltip]="logsTooltip">info</mat-icon>
+    </div>
+  </div>
+
+  <div class="chips-block">
+    <div fxLayout="row wrap" fxLayoutAlign="start start" class="chips">
+      <div *ngFor="let collab of collaborators" (mouseenter)="showCard(collab)" (mouseleave)="hideCard()" class="chip mat-elevation-z2"
+        [@joinLeave]="active" [style.border-color]="collab.color" fxFlex="150px" fxLayoutAlign='start center'>
+        <img src="{{collab.avatar}}" class="avatar" alt="avatar" width="32" height="32" />
+        <span class="mat-body-2 displayName">
+          {{collab.displayName}}
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <mat-card class="profile-block" [@cardState]="cardState">
+    <div fxLayoutAlign="start start" fxLayoutGap="10px">
+      <ng-container>
+        <img height="64px" weight="64px" class="card-icon" src="{{card.avatar}}" />
+      </ng-container>
+
+      <div class="info" fxLayout="column">
+        <span class="mat-body-2 prop">{{ card.displayName }}</span>
+        <span class="mat-caption prop">{{ card.login }}</span>
+        <span class="mat-caption prop">{{ card.deviceID }}</span>
+      </div>
+    </div>
+  </mat-card>
+
+</div>

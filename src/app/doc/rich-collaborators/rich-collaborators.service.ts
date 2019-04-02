@@ -1,93 +1,119 @@
-import { Injectable } from '@angular/core'
-import { Observable, Subject } from 'rxjs'
+import { ChangeDetectorRef, Injectable, OnDestroy } from '@angular/core'
+import { ICollaborator } from '@coast-team/mute-core'
+import { merge, Observable, Subject, Subscription } from 'rxjs'
+import { filter, map } from 'rxjs/operators'
 
-import { Collaborator } from 'mute-core'
+import { EProperties } from '../../core/settings/EProperties'
+import { Profile } from '../../core/settings/Profile'
+import { SettingsService } from '../../core/settings/settings.service'
+import { Colors } from './Colors'
 import { RichCollaborator } from './RichCollaborator'
 
-import * as randomMC from 'random-material-color'
-
-
 @Injectable()
-export class RichCollaboratorsService {
-
+export class RichCollaboratorsService implements OnDestroy {
   private joinSubject: Subject<RichCollaborator>
   private leaveSubject: Subject<number>
-  private changeSubject: Subject<{collab: RichCollaborator, prop: string}>
-
-  private colors: Map<number, string>
+  private updateSubject: Subject<RichCollaborator>
+  private me: Promise<void>
+  private colors: Colors
+  private subs: Subscription[]
 
   public collaborators: RichCollaborator[]
 
-  constructor () {
+  constructor(cd: ChangeDetectorRef, settings: SettingsService) {
     this.joinSubject = new Subject()
     this.leaveSubject = new Subject()
-    this.changeSubject = new Subject()
+    this.updateSubject = new Subject()
+    this.colors = new Colors()
+    this.subs = []
 
-    this.colors = new Map()
-    this.collaborators = []
+    let me = this.createMe(settings.profile)
+    this.collaborators = [me]
+    this.me = Promise.resolve()
+    this.subs.push(
+      settings.onChange
+        .pipe(filter((props) => props.includes(EProperties.profile) || props.includes(EProperties.profileDisplayName)))
+        .subscribe((props) => {
+          const index = this.collaborators.indexOf(me)
+          if (props.includes(EProperties.profile)) {
+            me = this.createMe(settings.profile)
+          } else {
+            me.displayName = settings.profile.displayName
+          }
+          this.collaborators[index] = me
+          this.updateSubject.next(me)
+        })
+    )
+
+    this.subs[this.subs.length] = this.onChanges.subscribe(() => cd.detectChanges())
   }
 
-  get onChange (): Observable<{collab: RichCollaborator, prop: string}> {
-    return this.changeSubject.asObservable()
+  ngOnDestroy() {
+    this.subs.forEach((s) => s.unsubscribe())
   }
 
-  get onJoin (): Observable<RichCollaborator> {
+  get onUpdate(): Observable<RichCollaborator> {
+    return this.updateSubject.asObservable()
+  }
+
+  get onJoin(): Observable<RichCollaborator> {
     return this.joinSubject.asObservable()
   }
 
-  get onLeave (): Observable<number> {
+  get onLeave(): Observable<number> {
     return this.leaveSubject.asObservable()
   }
 
-  set pseudoChangeSource (source: Observable<Collaborator>) {
-    source.subscribe((collab: Collaborator) => {
-      const color: string = this.getColor(collab.id)
-      for (const rc of this.collaborators) {
-        if (rc.id === collab.id) {
-          rc.pseudo = collab.pseudo
-          this.changeSubject.next({collab: rc, prop: 'pseudo'})
-          break
-        }
-      }
-    })
+  get onChanges(): Observable<void> {
+    return merge(this.updateSubject, this.joinSubject, this.leaveSubject, this.me).pipe(map(() => undefined))
   }
 
-  set joinSource (source: Observable<Collaborator>) {
-    source.subscribe((collab: Collaborator) => {
-      const color: string = this.getColor(collab.id)
-      const newRCollab = new RichCollaborator(collab.id, collab.pseudo, color)
-      this.collaborators[this.collaborators.length] = newRCollab
-      this.joinSubject.next(newRCollab)
-    })
-  }
-
-  set leaveSource (source: Observable<number>) {
-    source.subscribe((id: number) => {
-      this.colors.delete(id)
-      for (let i = 0; i < this.collaborators.length; i++) {
-        if (this.collaborators[i].id === id) {
-          this.collaborators.splice(i, 1)
-          this.leaveSubject.next(id)
-          break
+  subscribeToUpdateSource(source: Observable<ICollaborator>) {
+    this.subs.push(
+      source.subscribe((collab: ICollaborator) => {
+        for (const c of this.collaborators) {
+          if (collab.id === c.id) {
+            c.update(collab)
+            this.updateSubject.next(c)
+            break
+          }
         }
-      }
-    },
-    () => {},
-    () => {
-      this.colors.forEach((color: string, id: number) => {
-        this.colors.delete(id)
-        this.leaveSubject.next(id)
       })
-    })
+    )
   }
 
-  getColor (id: number): string {
-    if (this.colors.has(id)) {
-      return this.colors.get(id)
-    } else {
-      const color: string = randomMC.getColor({ shades: ['900', '800'] })
-      this.colors.set(id, color)
-      return color
-    }
+  subscribeToJoinSource(source: Observable<ICollaborator>) {
+    this.subs.push(
+      source.subscribe((collab) => {
+        const rc = new RichCollaborator(collab, this.colors.pick())
+        this.collaborators[this.collaborators.length] = rc
+        this.joinSubject.next(rc)
+      })
+    )
+  }
+
+  subscribeToLeaveSource(source: Observable<ICollaborator>) {
+    this.subs.push(
+      source.subscribe((collaborator: ICollaborator) => {
+        const index = this.collaborators.findIndex((c) => c.id === collaborator.id)
+        this.colors.dismiss(this.collaborators[index].color)
+        this.collaborators.splice(index, 1)
+        this.leaveSubject.next(collaborator.id)
+      })
+    )
+  }
+
+  private createMe(profile: Profile): RichCollaborator {
+    return new RichCollaborator(
+      {
+        id: -1,
+        login: profile.login,
+        displayName: profile.displayName,
+        deviceID: profile.deviceID,
+        email: profile.email,
+        avatar: profile.avatar,
+      },
+      this.colors.pick()
+    )
   }
 }

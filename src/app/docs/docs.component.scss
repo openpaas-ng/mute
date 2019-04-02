@@ -1,47 +1,118 @@
-@import 'variables';
-@import 'theme';
-
 :host {
   flex: 1;
-  overflow: hidden;
-}
-
-md-toolbar {
-  background-color: mat-color($primary, 50) !important;
-}
-
-.doc-grid {
   overflow: auto;
 }
+.mat-table {
+  overflow: auto;
 
-md-card {
-  margin: 2rem;
-  padding: 0;
-  height: 150px;
-
-  h3 {
-    font-weight: unset;
-    white-space: normal;
-    line-height: 3rem;
-    max-height: 9rem;
+  .mat-cell {
+    text-overflow: ellipsis;
     overflow: hidden;
-    hyphens: auto;
+
+    &.title-cell {
+      padding-left: 0;
+    }
+
+    .doc-in-trash {
+      padding: 0 16px;
+    }
+
+    .key {
+      width: 90px;
+      word-wrap: none;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
   }
 
-  .divider {
-    border: 0;
-    height: 1px;
-    margin: 0;
-    width: 100%;
-    background-image: linear-gradient(to left, $bg-card, $fg-divider, $bg-card);
+  .mat-row {
+    padding-left: 5px;
+
+    &:hover {
+      .desktop-actions {
+        visibility: visible;
+      }
+    }
+  }
+
+  .title-icon {
+    margin-right: 5px;
+    vertical-align: middle;
+  }
+
+  .desktop-actions {
+    visibility: hidden;
+    margin-right: 16px;
+  }
+
+  .synchronized-icon {
+    vertical-align: bottom;
+    margin-right: 5px;
   }
 }
 
-md-sidenav-container {
-  background-color: $bg-background !important;
+.mobile {
+  .mat-row {
+    padding: 0;
+  }
+}
+
+.nav {
+  border-right: 1px solid var(--theme-fg-divider);
+}
+
+.contenteditable {
+  padding: 4px;
+
+  &:active,
+  &:focus {
+    outline-width: 1px;
+    outline-color: var(--theme-accent);
+  }
+}
+
+.table-container {
+  height: 100%;
+}
+
+.info-values {
+  font-weight: 700;
+}
+
+.table-container-mobile {
+  height: 100%;
+}
+
+.title-button {
+  position: relative;
+  bottom: 1px;
+}
+
+.noDoc {
+  text-align: center;
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 120px;
+}
+
+mat-sidenav-container {
   height: 100%;
 
-  md-sidenav {
-    min-width: 24rem;
+  mat-sidenav {
+    min-width: 250px;
+  }
+
+  .rightsidenav {
+    .divider {
+      border: 0;
+      height: 1px;
+      width: 100%;
+      margin: 1rem 0 2rem 0;
+    }
+
+    .content {
+      margin-top: 30px;
+    }
   }
 }
